@@ -1,0 +1,21 @@
+{
+  "budget": {
+    "total_usd": 25,
+    "max_per_trade_usd": 10,
+    "daily_loss_limit_usd": 15,
+    "min_position_usd": 2
+  },
+  "strategy": {
+    "max_expiry_days": 7,
+    "min_expiry_hours": 6,
+    "min_volume_usd": 10000,
+    "min_confidence": 0.7,
+    "categories": ["politics", "crypto", "business", "science"],
+    "avoid_categories": ["sports"]
+  },
+  "mode": "autonomous",
+  "notify_on_trade": true,
+  "notify_channel": "telegram",
+  "research_sources": ["exa-search", "news"],
+  "check_interval_hours": 6
+}
