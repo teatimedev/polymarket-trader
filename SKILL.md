@@ -2,7 +2,7 @@
 name: polymarket-trader
 description: Trade on Polymarket prediction markets - scan opportunities, research with AI, place orders, monitor positions. Say "Set up Polymarket trading" to auto-configure.
 homepage: https://github.com/teatimedev/polymarket-trader
-metadata: {"clawdbot":{"emoji":"🎰"}}
+metadata: {"moltbot":{"emoji":"[DICE]","os":["darwin","linux","win32"],"requires":{"bins":["python3"],"envs":["POLYMARKET_PRIVATE_KEY","EXA_API_KEY"]}}}
 ---
 
 # Polymarket Trader
@@ -15,13 +15,13 @@ When user says **"Set up Polymarket trading"** or **"Configure Polymarket skill"
 
 1. Check if Python venv exists:
 ```bash
-ls ~/polymarket-venv/bin/activate
+ls ~/polymarket-venv/bin/activate 2>/dev/null || ls ~/polymarket-venv/Scripts/activate 2>/dev/null
 ```
 
 2. If not, create it:
 ```bash
 python3 -m venv ~/polymarket-venv
-source ~/polymarket-venv/bin/activate
+source ~/polymarket-venv/bin/activate || source ~/polymarket-venv/Scripts/activate
 pip install py-clob-client eth-account requests
 ```
 
@@ -30,7 +30,7 @@ pip install py-clob-client eth-account requests
    - **Polymarket Trader**: `0 */6 * * *` Europe/London, isolated session  
    - **Polymarket Position Monitor**: `30 */3 * * *` Europe/London, isolated session
 
-4. Check if `POLYMARKET_PRIVATE_KEY` is set. If not, tell user to add it to ~/.bashrc
+4. Check if `POLYMARKET_PRIVATE_KEY` is set. If not, tell user to add it to shell config.
 
 5. Confirm setup complete and explain what each cron does.
 
@@ -44,13 +44,16 @@ pip install py-clob-client eth-account requests
 | "Search Polymarket for X" | Run markets.py search "X" |
 | "Check Polymarket positions" | Run account.py |
 | "Check Polymarket balance" | Run account.py |
-| "Buy $X on [market] YES/NO" | Research → trade.py with --yes |
+| "Buy $X on [market] YES/NO" | Research -> trade.py with --yes |
 | "Cancel Polymarket orders" | Run orders.py cancel-all |
-| "Research [market topic]" | Exa search → form probability → compare to market |
+| "Research [market topic]" | Exa search -> form probability -> compare to market |
 
 ## Scripts
 
-All scripts require: `source ~/polymarket-venv/bin/activate`
+All scripts require activating the venv first:
+```bash
+source ~/polymarket-venv/bin/activate || source ~/polymarket-venv/Scripts/activate
+```
 
 ### Scan for Opportunities
 ```bash
@@ -120,7 +123,7 @@ python3 ~/clawd/skills/polymarket-trader/scripts/account.py
 python3 ~/clawd/skills/polymarket-trader/scripts/scanner.py --exclude-sports --limit 15
 
 ## RESEARCH & TRADE
-Top 2-3 markets: Exa research → probability estimate → trade if edge >10%
+Top 2-3 markets: Exa research -> probability estimate -> trade if edge >10%
 
 ## UPDATE MEMORY
 Log trades, research, lessons.
@@ -135,9 +138,9 @@ Read memory for entry prices.
 source ~/polymarket-venv/bin/activate && python3 ~/clawd/skills/polymarket-trader/scripts/account.py
 
 ## ACTIONS
-- Up >15% → consider profit
-- Down >20% → consider stop
-- Resolving <24h → flag
+- Up >15% -> consider profit
+- Down >20% -> consider stop
+- Resolving <24h -> flag
 
 ## UPDATE MEMORY
 Log status. Only message user if notable.
@@ -163,7 +166,7 @@ EXA_API_KEY="..."               # Required: for research (https://exa.ai)
 
 ## Research with Exa
 
-Use mcporter (bundled with Clawdbot) to call Exa MCP:
+Use mcporter (bundled with Moltbot) to call Exa MCP:
 
 ### Web Search (news)
 ```bash
@@ -185,7 +188,14 @@ mcporter call "https://mcp.exa.ai/mcp?tools=deep_search_exa" deep_search_exa \
 2. Get expert analysis: `deep_search_exa` for synthesized view
 3. Extract key evidence for/against
 4. Form probability estimate
-5. Compare to market price → calculate edge
+5. Compare to market price -> calculate edge
+
+## Safety Limits
+
+The auto-trader enforces these limits (configurable in config.json):
+- **max_trades_per_day**: Maximum autonomous trades (default: 10)
+- **cooldown_minutes_between_trades**: Minimum time between trades (default: 30)
+- **require_human_approval_above_usd**: Trades above this amount need manual approval (default: 20)
 
 ## Notes
 
@@ -193,3 +203,4 @@ mcporter call "https://mcp.exa.ai/mcp?tools=deep_search_exa" deep_search_exa \
 - Funds in USDC
 - Minimum order: $5
 - Use `--yes` flag for automated trading (skips confirmation)
+- State is stored in `~/.config/polymarket-trader/state.json`

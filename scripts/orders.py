@@ -7,10 +7,15 @@ import os
 import sys
 import argparse
 
-# Add venv to path
-VENV_PATH = os.path.expanduser("~/polymarket-venv/lib/python3.12/site-packages")
-if VENV_PATH not in sys.path:
-    sys.path.insert(0, VENV_PATH)
+# Add venv to path (version-agnostic)
+VENV_BASE = os.path.expanduser("~/polymarket-venv/lib")
+if os.path.exists(VENV_BASE):
+    for entry in os.listdir(VENV_BASE):
+        if entry.startswith("python"):
+            site_packages = os.path.join(VENV_BASE, entry, "site-packages")
+            if site_packages not in sys.path:
+                sys.path.insert(0, site_packages)
+            break
 
 from eth_account import Account
 from py_clob_client.client import ClobClient
@@ -68,10 +73,10 @@ def cancel_order(client, order_id):
     """Cancel a specific order"""
     try:
         result = client.cancel(order_id)
-        print(f"✅ Order cancelled: {order_id}")
+        print(f"OK Order cancelled: {order_id}")
         return result
     except Exception as e:
-        print(f"❌ Error cancelling order: {e}")
+        print(f"X Error cancelling order: {e}")
         return None
 
 
@@ -79,10 +84,10 @@ def cancel_all(client):
     """Cancel all open orders"""
     try:
         result = client.cancel_all()
-        print(f"✅ All orders cancelled")
+        print(f"OK All orders cancelled")
         return result
     except Exception as e:
-        print(f"❌ Error cancelling orders: {e}")
+        print(f"X Error cancelling orders: {e}")
         return None
 
 

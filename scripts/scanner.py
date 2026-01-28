@@ -9,13 +9,30 @@ import sys
 import json
 import argparse
 import requests
+from requests.adapters import HTTPAdapter, Retry
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
+import math
 
 GAMMA_API = "https://gamma-api.polymarket.com"
 
+
+def get_session():
+    """Create requests session with retry logic"""
+    session = requests.Session()
+    retries = Retry(
+        total=3,
+        backoff_factor=0.5,
+        status_forcelist=[500, 502, 503, 504],
+        allowed_methods=["GET"]
+    )
+    session.mount("https://", HTTPAdapter(max_retries=retries))
+    return session
+
+
 def fetch_all_active_markets(limit: int = 500) -> List[Dict]:
     """Fetch all active markets from Polymarket"""
+    session = get_session()
     all_markets = []
     offset = 0
     batch_size = 100
@@ -32,8 +49,9 @@ def fetch_all_active_markets(limit: int = 500) -> List[Dict]:
         }
         
         try:
-            r = requests.get(url, params=params, timeout=15)
+            r = session.get(url, params=params, timeout=15)
             if r.status_code != 200:
+                print(f"API returned status {r.status_code}", file=sys.stderr)
                 break
             
             markets = r.json()
@@ -47,7 +65,7 @@ def fetch_all_active_markets(limit: int = 500) -> List[Dict]:
             if len(markets) < batch_size:
                 break
                 
-        except Exception as e:
+        except requests.RequestException as e:
             print(f"Error fetching markets: {e}", file=sys.stderr)
             break
     
@@ -235,7 +253,6 @@ def score_opportunity(market: Dict) -> float:
         score += 0  # Too extreme
     
     # Volume factor (log scale)
-    import math
     vol = market["volume"]
     if vol > 0:
         vol_score = min(math.log10(vol + 1) / 6, 1)  # Cap at ~$1M
@@ -290,10 +307,10 @@ def format_market_summary(m: Dict, score: float) -> str:
     end_str = m["end_date"].strftime("%b %d") if m["end_date"] else "?"
     
     return f"""
-📊 {m['question'][:80]}{'...' if len(m['question']) > 80 else ''}
+[MARKET] {m['question'][:80]}{'...' if len(m['question']) > 80 else ''}
    YES: {yes_pct} | NO: {no_pct}
    Vol: {vol_str} | Ends: {end_str} | Score: {score:.0f}
-   🔗 {m['url']}"""
+   Link: {m['url']}"""
 
 
 def scan_markets(
@@ -307,7 +324,7 @@ def scan_markets(
     """
     Scan all markets and return top opportunities.
     """
-    print("🔍 Fetching all active markets...", file=sys.stderr)
+    print("[SCAN] Fetching all active markets...", file=sys.stderr)
     raw_markets = fetch_all_active_markets(500)
     print(f"   Found {len(raw_markets)} raw markets", file=sys.stderr)
     
@@ -390,7 +407,7 @@ def main():
                 o["end_date"] = o["end_date"].isoformat()
         print(json.dumps(opportunities, indent=2))
     else:
-        print(f"\n🎯 TOP {len(opportunities)} OPPORTUNITIES\n" + "="*50)
+        print(f"\n[TARGET] TOP {len(opportunities)} OPPORTUNITIES\n" + "="*50)
         
         # Group by category
         by_cat = {}
@@ -401,7 +418,7 @@ def main():
             by_cat[cat].append(o)
         
         for cat, markets in sorted(by_cat.items(), key=lambda x: -len(x[1])):
-            print(f"\n📁 {cat.upper()} ({len(markets)})")
+            print(f"\n[CATEGORY] {cat.upper()} ({len(markets)})")
             for m in markets:
                 print(format_market_summary(m, m["score"]))
 

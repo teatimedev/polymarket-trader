@@ -21,6 +21,11 @@
     "position_check_hours": 3,
     "daily_briefing_hour": 9
   },
+  "safety": {
+    "max_trades_per_day": 10,
+    "cooldown_minutes_between_trades": 30,
+    "require_human_approval_above_usd": 20
+  },
   "notifications": {
     "on_trade": true,
     "on_profit_pct": 15,

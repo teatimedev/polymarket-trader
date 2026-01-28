@@ -1,23 +1,53 @@
+# State files (stored in ~/.config/polymarket-trader/)
+state.json
+
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
 venv/
 ENV/
-
-# Environment
-.env
-.env.local
-
-# State (user-specific)
-state.json
+env/
+.venv/
 
 # IDE
-.vscode/
 .idea/
+.vscode/
+*.swp
+*.swo
+*~
 
 # OS
 .DS_Store
 Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Secrets (never commit these!)
+.env
+.env.local
+*.pem
+*.key
+credentials.json
+secrets.json

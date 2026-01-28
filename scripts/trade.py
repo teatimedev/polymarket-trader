@@ -7,15 +7,34 @@ import os
 import sys
 import argparse
 import json
+import re
 
-# Add venv to path
-VENV_PATH = os.path.expanduser("~/polymarket-venv/lib/python3.12/site-packages")
-if VENV_PATH not in sys.path:
-    sys.path.insert(0, VENV_PATH)
+# Add venv to path (version-agnostic)
+VENV_BASE = os.path.expanduser("~/polymarket-venv/lib")
+if os.path.exists(VENV_BASE):
+    for entry in os.listdir(VENV_BASE):
+        if entry.startswith("python"):
+            site_packages = os.path.join(VENV_BASE, entry, "site-packages")
+            if site_packages not in sys.path:
+                sys.path.insert(0, site_packages)
+            break
 
 from eth_account import Account
 from py_clob_client.client import ClobClient
 from py_clob_client.clob_types import OrderArgs, OrderType, PartialCreateOrderOptions
+
+
+def validate_token_id(token_id: str) -> bool:
+    """Validate token ID format (should be numeric string or hex)"""
+    if not token_id:
+        return False
+    # Polymarket token IDs are typically large integers
+    if re.match(r'^\d+$', token_id):
+        return True
+    # Or hex format
+    if re.match(r'^0x[a-fA-F0-9]+$', token_id):
+        return True
+    return False
 
 
 def get_client():
@@ -89,6 +108,12 @@ def main():
     
     args = parser.parse_args()
     
+    # Validate token ID
+    if not validate_token_id(args.token_id):
+        print(f"Error: Invalid token ID format: {args.token_id}")
+        print("Token IDs should be numeric (e.g., '123456789') or hex (e.g., '0xabc123')")
+        sys.exit(1)
+    
     # Validate price for limit orders
     if not args.market and args.price is None:
         print("Error: --price required for limit orders (use --market for market orders)")
@@ -126,9 +151,9 @@ def main():
     result = place_order(client, args.token_id, side, price, args.size, order_type)
     
     if "error" in result:
-        print(f"❌ Order failed: {result['error']}")
+        print(f"X Order failed: {result['error']}")
     else:
-        print(f"✅ Order placed!")
+        print(f"OK Order placed!")
         print(json.dumps(result, indent=2, default=str))
 
 

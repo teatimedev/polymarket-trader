@@ -11,19 +11,43 @@ import subprocess
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-# Add venv to path
-VENV_PATH = os.path.expanduser("~/polymarket-venv/lib/python3.12/site-packages")
-if VENV_PATH not in sys.path:
-    sys.path.insert(0, VENV_PATH)
+# Add venv to path (version-agnostic)
+VENV_BASE = os.path.expanduser("~/polymarket-venv/lib")
+if os.path.exists(VENV_BASE):
+    for entry in os.listdir(VENV_BASE):
+        if entry.startswith("python"):
+            site_packages = os.path.join(VENV_BASE, entry, "site-packages")
+            if site_packages not in sys.path:
+                sys.path.insert(0, site_packages)
+            break
 
 import requests
+from requests.adapters import HTTPAdapter, Retry
 from eth_account import Account
 from py_clob_client.client import ClobClient
 
 SKILL_DIR = Path(__file__).parent.parent
 CONFIG_PATH = SKILL_DIR / "config.json"
-STATE_PATH = SKILL_DIR / "state.json"
+
+# Use XDG config directory for state (user-writable)
+CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config"))) / "polymarket-trader"
+CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+STATE_PATH = CONFIG_DIR / "state.json"
+
 GAMMA_API = "https://gamma-api.polymarket.com"
+
+
+def get_session():
+    """Create requests session with retry logic"""
+    session = requests.Session()
+    retries = Retry(
+        total=3,
+        backoff_factor=0.5,
+        status_forcelist=[500, 502, 503, 504],
+        allowed_methods=["GET", "POST"]
+    )
+    session.mount("https://", HTTPAdapter(max_retries=retries))
+    return session
 
 
 def load_config():
@@ -41,6 +65,8 @@ def load_state():
             return json.load(f)
     return {
         "trades": [],
+        "trades_today": 0,
+        "last_trade_time": None,
         "daily_pnl": 0,
         "last_reset": datetime.now(timezone.utc).isoformat(),
         "total_invested": 0
@@ -51,6 +77,52 @@ def save_state(state):
     """Save trading state"""
     with open(STATE_PATH, 'w') as f:
         json.dump(state, f, indent=2, default=str)
+
+
+def check_safety_limits(state, config, trade_size_usd):
+    """
+    Check if trade is allowed based on safety limits.
+    Returns (allowed: bool, reason: str)
+    """
+    safety = config.get("safety", {})
+    
+    # Check max trades per day
+    max_trades = safety.get("max_trades_per_day", 10)
+    if state.get("trades_today", 0) >= max_trades:
+        return False, f"Daily trade limit reached ({max_trades})"
+    
+    # Check cooldown
+    cooldown_minutes = safety.get("cooldown_minutes_between_trades", 30)
+    last_trade = state.get("last_trade_time")
+    if last_trade:
+        last_trade_dt = datetime.fromisoformat(last_trade.replace("Z", "+00:00"))
+        elapsed = (datetime.now(timezone.utc) - last_trade_dt).total_seconds() / 60
+        if elapsed < cooldown_minutes:
+            return False, f"Cooldown active ({cooldown_minutes - elapsed:.0f}m remaining)"
+    
+    # Check if human approval needed
+    approval_threshold = safety.get("require_human_approval_above_usd", 20)
+    if trade_size_usd > approval_threshold:
+        return False, f"Trade size ${trade_size_usd} exceeds auto-approval limit (${approval_threshold})"
+    
+    return True, "OK"
+
+
+def record_trade(state, trade_info):
+    """Record a trade and update counters"""
+    state["trades"].append(trade_info)
+    state["trades_today"] = state.get("trades_today", 0) + 1
+    state["last_trade_time"] = datetime.now(timezone.utc).isoformat()
+    
+    # Reset daily counter if new day
+    last_reset = state.get("last_reset")
+    if last_reset:
+        last_reset_dt = datetime.fromisoformat(last_reset.replace("Z", "+00:00"))
+        if last_reset_dt.date() < datetime.now(timezone.utc).date():
+            state["trades_today"] = 1
+            state["last_reset"] = datetime.now(timezone.utc).isoformat()
+    
+    return state
 
 
 def get_client():
@@ -81,6 +153,8 @@ def find_expiring_markets(max_days=7, min_hours=6, limit=50):
     max_date = now + timedelta(days=max_days)
     min_date = now + timedelta(hours=min_hours)
     
+    session = get_session()
+    
     # Fetch active events
     url = f"{GAMMA_API}/events"
     params = {
@@ -89,11 +163,15 @@ def find_expiring_markets(max_days=7, min_hours=6, limit=50):
         "limit": 200
     }
     
-    r = requests.get(url, params=params, timeout=30)
-    if r.status_code != 200:
+    try:
+        r = session.get(url, params=params, timeout=30)
+        if r.status_code != 200:
+            return []
+        events = r.json()
+    except requests.RequestException as e:
+        print(f"Error fetching events: {e}", file=sys.stderr)
         return []
     
-    events = r.json()
     expiring = []
     
     for event in events:
@@ -213,11 +291,11 @@ def format_opportunity_report(markets, evaluations):
         except:
             yes_price = 0.5
         
-        status = "🟢 TRADE" if should_trade else "⚪ WATCH"
+        status = "TRADE" if should_trade else "WATCH"
         
         report.append(f"{status} {question}...")
         report.append(f"   YES: {yes_price*100:.1f}% | Expires: {hours:.0f}h | Vol: ${volume/1000:.0f}K")
-        report.append(f"   → {reasoning}")
+        report.append(f"   -> {reasoning}")
         report.append("")
     
     return "\n".join(report)
@@ -233,8 +311,10 @@ def main():
     
     budget = config.get("budget", {})
     strategy = config.get("strategy", {})
+    safety = config.get("safety", {})
     
     print(f"Budget: ${budget.get('total_usd', 25)} | Max/trade: ${budget.get('max_per_trade_usd', 10)}")
+    print(f"Safety: {safety.get('max_trades_per_day', 10)} trades/day, {safety.get('cooldown_minutes_between_trades', 30)}m cooldown")
     print(f"Looking for markets expiring in {strategy.get('min_expiry_hours', 6)}-{strategy.get('max_expiry_days', 7)*24}h")
     print()
     

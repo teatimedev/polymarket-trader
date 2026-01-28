@@ -8,13 +8,28 @@ import sys
 import json
 import argparse
 import requests
+from requests.adapters import HTTPAdapter, Retry
 from datetime import datetime
 
 GAMMA_API = "https://gamma-api.polymarket.com"
 
 
+def get_session():
+    """Create requests session with retry logic"""
+    session = requests.Session()
+    retries = Retry(
+        total=3,
+        backoff_factor=0.5,
+        status_forcelist=[500, 502, 503, 504],
+        allowed_methods=["GET"]
+    )
+    session.mount("https://", HTTPAdapter(max_retries=retries))
+    return session
+
+
 def search_markets(query, limit=10):
     """Search markets by query (client-side filtering since API doesn't support text search)"""
+    session = get_session()
     # Fetch active events
     url = f"{GAMMA_API}/events"
     params = {
@@ -22,11 +37,15 @@ def search_markets(query, limit=10):
         "closed": "false",
         "limit": 200  # Fetch more to filter
     }
-    r = requests.get(url, params=params, timeout=15)
-    if r.status_code != 200:
+    try:
+        r = session.get(url, params=params, timeout=15)
+        if r.status_code != 200:
+            return []
+        events = r.json()
+    except requests.RequestException as e:
+        print(f"Error searching markets: {e}", file=sys.stderr)
         return []
     
-    events = r.json()
     query_lower = query.lower()
     query_terms = query_lower.split()
     
@@ -52,6 +71,7 @@ def search_markets(query, limit=10):
 
 def get_trending(limit=10):
     """Get trending/active markets"""
+    session = get_session()
     url = f"{GAMMA_API}/markets"
     params = {
         "limit": limit,
@@ -59,14 +79,18 @@ def get_trending(limit=10):
         "order": "volume24hr",
         "ascending": "false"
     }
-    r = requests.get(url, params=params, timeout=15)
-    if r.status_code == 200:
-        return r.json()
+    try:
+        r = session.get(url, params=params, timeout=15)
+        if r.status_code == 200:
+            return r.json()
+    except requests.RequestException as e:
+        print(f"Error fetching trending: {e}", file=sys.stderr)
     return []
 
 
 def get_by_category(category, limit=10):
     """Get markets by category (politics, crypto, sports, etc)"""
+    session = get_session()
     # Map common categories to tags
     category_map = {
         "politics": "politics",
@@ -87,45 +111,62 @@ def get_by_category(category, limit=10):
         "order": "volume24hr",
         "ascending": "false"
     }
-    r = requests.get(url, params=params, timeout=15)
-    if r.status_code == 200:
-        return r.json()
+    try:
+        r = session.get(url, params=params, timeout=15)
+        if r.status_code == 200:
+            return r.json()
+    except requests.RequestException as e:
+        print(f"Error fetching category: {e}", file=sys.stderr)
     return []
 
 
 def get_market_detail(market_id):
     """Get detailed market info including order book"""
+    session = get_session()
+    
     # Try events endpoint by slug first
     url = f"{GAMMA_API}/events"
     params = {"slug": market_id}
-    r = requests.get(url, params=params, timeout=15)
-    if r.status_code == 200:
-        events = r.json()
-        if events:
-            event = events[0]
-            # Include markets in the event
-            return event
+    try:
+        r = session.get(url, params=params, timeout=15)
+        if r.status_code == 200:
+            events = r.json()
+            if events:
+                event = events[0]
+                # Include markets in the event
+                return event
+    except requests.RequestException:
+        pass
     
     # Try by ID
     url = f"{GAMMA_API}/events/{market_id}"
-    r = requests.get(url, timeout=15)
-    if r.status_code == 200:
-        return r.json()
+    try:
+        r = session.get(url, timeout=15)
+        if r.status_code == 200:
+            return r.json()
+    except requests.RequestException:
+        pass
     
     # Try markets endpoint
     url = f"{GAMMA_API}/markets/{market_id}"
-    r = requests.get(url, timeout=15)
-    if r.status_code == 200:
-        return r.json()
+    try:
+        r = session.get(url, timeout=15)
+        if r.status_code == 200:
+            return r.json()
+    except requests.RequestException:
+        pass
     
     # Try markets by slug
     url = f"{GAMMA_API}/markets"
     params = {"slug": market_id}
-    r = requests.get(url, params=params, timeout=15)
-    if r.status_code == 200:
-        markets = r.json()
-        if markets:
-            return markets[0]
+    try:
+        r = session.get(url, params=params, timeout=15)
+        if r.status_code == 200:
+            markets = r.json()
+            if markets:
+                return markets[0]
+    except requests.RequestException:
+        pass
     
     return None
 
@@ -201,7 +242,7 @@ def format_market(m, detailed=False):
         end_str = "?"
     
     output = f"""
-📊 {question}
+[MARKET] {question}
    YES: {yes_pct} | NO: {no_pct}
    Volume: {vol_str} | Ends: {end_str}"""
     
