@@ -1,241 +1,267 @@
-# Polymarket Trader Skill for Clawdbot
+# 🎰 Polymarket Trader - Clawdbot Skill
 
-An autonomous Polymarket trading system that scans markets, researches opportunities, and executes trades based on calculated edge.
+An autonomous Polymarket trading skill for [Clawdbot](https://github.com/clawdbot/clawdbot). Scans prediction markets, researches opportunities with AI, and executes trades when it finds edge.
 
-## Features
+## Quick Start
 
-- **Market Scanner**: Systematically scans 500+ active markets and ranks by opportunity score
-- **Research Integration**: Uses Exa AI for deep research on market topics
-- **Edge Calculation**: Compares market odds to researched probability estimates
-- **Automated Trading**: Places limit orders when edge threshold is met
-- **Position Monitoring**: Tracks P&L and alerts on significant moves
-- **Memory System**: Logs all trades, research, and lessons learned
+### 1. Install the Skill
+
+```bash
+cd ~/clawd/skills
+git clone https://github.com/teatimedev/polymarket-trader.git
+```
+
+Or via ClawdHub (when published):
+```bash
+clawdhub install polymarket-trader
+```
+
+### 2. Set Up Python Environment
+
+```bash
+python3 -m venv ~/polymarket-venv
+source ~/polymarket-venv/bin/activate
+pip install py-clob-client eth-account requests
+```
+
+### 3. Configure Credentials
+
+Add to your shell config (`~/.bashrc`):
+```bash
+export POLYMARKET_PRIVATE_KEY="0x..."  # Your wallet private key
+export POLYMARKET_FUNDER="0x..."       # Optional: for Magic Link accounts
+```
+
+### 4. Fund Your Wallet
+
+Deposit USDC to your Polygon wallet. Minimum $5 per trade.
+
+### 5. Restart Clawdbot
+
+```bash
+clawdbot gateway restart
+```
+
+---
+
+## Chat Commands
+
+Once installed, just chat with your Clawdbot:
+
+| You say | What happens |
+|---------|--------------|
+| "Scan Polymarket for opportunities" | Runs the scanner, shows top markets |
+| "What's trending on Polymarket?" | Shows trending markets by volume |
+| "Search Polymarket for Trump" | Searches markets matching query |
+| "Check my Polymarket positions" | Shows your current positions & P&L |
+| "Research the Iran strike market" | Deep research on a specific market |
+| "Buy $5 of YES on [market]" | Places a trade |
+| "What's my Polymarket balance?" | Shows account balance |
+| "Cancel all my Polymarket orders" | Cancels open orders |
+
+### Example Conversation
+
+```
+You: Scan polymarket for good opportunities
+
+Clawd: 🔍 Scanning 500+ markets...
+
+📊 TOP 5 OPPORTUNITIES
+
+1. US strikes Iran by Feb 28 — Score: 99
+   YES: 42.5% | $2.9M volume
+   
+2. Thai Election - People's Party — Score: 93
+   YES: 61.5% | $649K volume
+
+Want me to research any of these deeper?
+
+You: Research the Iran one
+
+Clawd: 🔎 Researching "US strikes Iran"...
+
+[Pulls 8 news sources, analyzes evidence]
+
+My estimate: 55% (market: 42.5%)
+Edge: +12.5% on YES
+
+Want me to place a trade?
+
+You: Yes, $5 on YES
+
+Clawd: ✅ Order placed!
+BUY YES @ $0.43 | Size: $5
+```
+
+---
+
+## Automated Trading (Cron Jobs)
+
+Set up autonomous trading that runs in the background:
+
+### Daily Briefing (9am)
+```bash
+clawdbot cron add --name "Polymarket Daily Scan" \
+  --schedule "0 9 * * *" \
+  --tz "Europe/London" \
+  --message "Scan Polymarket and send me the top 5 opportunities"
+```
+
+### Trading Scan (every 6h)
+```bash
+clawdbot cron add --name "Polymarket Trader" \
+  --schedule "0 */6 * * *" \
+  --tz "Europe/London" \
+  --message "Scan Polymarket, research top markets, trade if edge >10%"
+```
+
+### Position Monitor (every 3h)
+```bash
+clawdbot cron add --name "Position Monitor" \
+  --schedule "30 */3 * * *" \
+  --tz "Europe/London" \
+  --message "Check my Polymarket positions, alert if any moved significantly"
+```
+
+---
 
 ## How It Works
 
 ```
-SCAN (500+ markets)
-    ↓ filter by volume, liquidity, odds
-TOP OPPORTUNITIES (scored 0-100)
-    ↓ pick top 2-3
-RESEARCH (Exa deep search)
-    ↓ gather evidence, form probability
-EDGE > 10%?
-    ↓ yes
-PLACE TRADE → LOG → MONITOR
+┌─────────────────────────────────────────────────────┐
+│  SCAN                                               │
+│  Pull 500+ active markets from Polymarket API       │
+└─────────────────┬───────────────────────────────────┘
+                  ▼
+┌─────────────────────────────────────────────────────┐
+│  FILTER & SCORE                                     │
+│  Volume >$10k, Liquidity >$1k, Odds 10-90%         │
+│  Score by uncertainty, volume, time to resolution   │
+└─────────────────┬───────────────────────────────────┘
+                  ▼
+┌─────────────────────────────────────────────────────┐
+│  RESEARCH (Top 2-3 markets)                         │
+│  Exa AI deep search for news, expert opinions       │
+└─────────────────┬───────────────────────────────────┘
+                  ▼
+┌─────────────────────────────────────────────────────┐
+│  CALCULATE EDGE                                     │
+│  My probability estimate vs market price            │
+│  Edge = My estimate - Market price                  │
+└─────────────────┬───────────────────────────────────┘
+                  ▼
+┌─────────────────────────────────────────────────────┐
+│  TRADE (if edge >10%)                               │
+│  Place limit order, log to memory                   │
+└─────────────────┬───────────────────────────────────┘
+                  ▼
+┌─────────────────────────────────────────────────────┐
+│  MONITOR                                            │
+│  Track P&L, alert on moves, take profits/stop loss  │
+└─────────────────────────────────────────────────────┘
 ```
 
 ### Scoring Algorithm (100 pts max)
 
-| Factor | Points | Rationale |
-|--------|--------|-----------|
-| Odds uncertainty (20-80%) | 30 | More uncertainty = more edge potential |
-| Volume (log scale) | 25 | Higher volume = credible market |
-| Liquidity | 15 | Can enter/exit positions |
-| 24h activity | 10 | Active trading = live market |
-| Time to resolution (1-30d) | 20 | Sweet spot for research + resolution |
+| Factor | Points | Why |
+|--------|--------|-----|
+| Odds 20-80% | 30 | Uncertainty = edge potential |
+| Volume | 25 | Credible market |
+| Liquidity | 15 | Can enter/exit |
+| 24h activity | 10 | Active trading |
+| Resolves in 1-30 days | 20 | Sweet spot |
 
-## Installation
-
-### Prerequisites
-
-- [Clawdbot](https://github.com/clawdbot/clawdbot) installed and running
-- Python 3.10+
-- Polymarket account with USDC balance
-
-### 1. Install the skill
-
-```bash
-# Clone to your Clawdbot skills directory
-cd ~/clawd/skills
-git clone https://github.com/YOUR_USERNAME/polymarket-trader.git
-```
-
-### 2. Set up Python environment
-
-```bash
-# Create virtual environment
-python3 -m venv ~/polymarket-venv
-source ~/polymarket-venv/bin/activate
-
-# Install dependencies
-pip install py-clob-client eth-account requests
-```
-
-### 3. Configure environment variables
-
-```bash
-# Add to ~/.bashrc or your shell config
-export POLYMARKET_PRIVATE_KEY="0x..."  # Your wallet private key
-export POLYMARKET_FUNDER="0x..."       # Optional: proxy address for Magic Link accounts
-```
-
-**Getting your private key:**
-- **MetaMask**: Settings → Security → Reveal Private Key
-- **Magic Link**: Find your proxy address on polymarket.com account settings
-
-### 4. Fund your wallet
-
-Deposit USDC to your Polygon wallet address. Minimum $5 per trade.
-
-## Usage
-
-### Manual Commands
-
-```bash
-source ~/polymarket-venv/bin/activate
-
-# Check account balance and positions
-python3 scripts/account.py
-
-# Scan for opportunities
-python3 scripts/scanner.py --limit 20 --exclude-sports
-
-# Search specific markets
-python3 scripts/markets.py search "trump"
-python3 scripts/markets.py trending
-python3 scripts/markets.py detail <slug>
-
-# Place a trade
-python3 scripts/trade.py buy <token_id> --price 0.50 --size 5 --yes
-
-# Manage orders
-python3 scripts/orders.py list
-python3 scripts/orders.py cancel <order_id>
-python3 scripts/orders.py cancel-all
-```
-
-### Scanner Options
-
-```bash
-# Full scan excluding sports
-python3 scripts/scanner.py --exclude-sports --limit 30
-
-# Filter by category
-python3 scripts/scanner.py -c politics -c geopolitics
-
-# Tighter odds range (closer to 50/50)
-python3 scripts/scanner.py --min-odds 0.30 --max-odds 0.70
-
-# Higher volume threshold
-python3 scripts/scanner.py --min-volume 50000
-
-# JSON output
-python3 scripts/scanner.py --json --limit 10
-```
-
-### Automated Trading (Cron Jobs)
-
-Set up Clawdbot cron jobs for autonomous operation:
-
-**Daily Market Scan (9am)**
-```json
-{
-  "name": "Polymarket Daily Scan",
-  "schedule": { "kind": "cron", "expr": "0 9 * * *", "tz": "Europe/London" },
-  "payload": {
-    "message": "Run market scan and report top 5 opportunities..."
-  }
-}
-```
-
-**Trading Scan (every 6h)**
-```json
-{
-  "name": "Polymarket Trader",
-  "schedule": { "kind": "cron", "expr": "0 */6 * * *", "tz": "Europe/London" },
-  "payload": {
-    "message": "Scan markets, research top picks, execute trades if edge found..."
-  }
-}
-```
-
-**Position Monitor (every 3h)**
-```json
-{
-  "name": "Position Monitor",
-  "schedule": { "kind": "cron", "expr": "30 */3 * * *", "tz": "Europe/London" },
-  "payload": {
-    "message": "Check positions, alert on significant moves..."
-  }
-}
-```
+---
 
 ## Configuration
 
-Edit `config.json` to customize:
+Edit `config.json` in the skill folder:
 
 ```json
 {
   "budget": {
     "total_usd": 25,
     "max_per_trade_usd": 10,
-    "daily_loss_limit_usd": 15,
-    "min_position_usd": 2
+    "daily_loss_limit_usd": 15
   },
   "strategy": {
-    "max_expiry_days": 7,
-    "min_expiry_hours": 6,
     "min_volume_usd": 10000,
     "min_confidence": 0.7,
-    "categories": ["politics", "crypto", "business", "science"],
+    "categories": ["politics", "crypto", "geopolitics"],
     "avoid_categories": ["sports"]
   }
 }
 ```
 
-## Trading Workflow
+---
 
-1. **Scanner** pulls all active markets from Polymarket Gamma API
-2. **Filter** by volume ($10k+), liquidity ($1k+), odds (10-90%)
-3. **Score** each market (uncertainty, volume, liquidity, time)
-4. **Research** top opportunities using Exa AI search
-5. **Estimate** true probability based on evidence
-6. **Calculate edge**: Your estimate - Market price
-7. **Trade** if edge > 10% threshold
-8. **Log** trade details, thesis, and reasoning to memory
-9. **Monitor** positions for profit-taking or stop-loss
+## Scripts (Advanced)
 
-## Scripts Reference
+For direct CLI usage:
 
-| Script | Purpose |
-|--------|---------|
-| `scanner.py` | Systematic market scanner with scoring |
-| `markets.py` | Search, trending, category, and detail queries |
-| `trade.py` | Place buy/sell orders |
-| `orders.py` | List and cancel open orders |
-| `account.py` | Check balance and positions |
-| `auto_trader.py` | Autonomous trading logic (used by crons) |
+```bash
+source ~/polymarket-venv/bin/activate
+
+# Scanner
+python3 scripts/scanner.py --limit 20 --exclude-sports
+python3 scripts/scanner.py -c politics -c geopolitics --json
+
+# Markets
+python3 scripts/markets.py trending
+python3 scripts/markets.py search "bitcoin"
+python3 scripts/markets.py detail <slug>
+
+# Trading
+python3 scripts/trade.py buy <token_id> --price 0.50 --size 5 --yes
+python3 scripts/trade.py sell <token_id> --price 0.70 --size 5 --yes
+
+# Orders
+python3 scripts/orders.py list
+python3 scripts/orders.py cancel <order_id>
+python3 scripts/orders.py cancel-all
+
+# Account
+python3 scripts/account.py
+```
+
+---
+
+## Requirements
+
+- [Clawdbot](https://github.com/clawdbot/clawdbot) (any recent version)
+- Python 3.10+
+- Polymarket account with USDC on Polygon
+- (Optional) [Exa AI](https://exa.ai) API key for research
+
+---
 
 ## API Notes
 
-- **Gamma API** (read-only): `https://gamma-api.polymarket.com`
-- **CLOB API** (trading): `https://clob.polymarket.com`
-- Trades on **Polygon mainnet** (chain_id: 137)
-- Funds in **USDC**
-- Minimum order size: **$5**
+| API | URL | Purpose |
+|-----|-----|---------|
+| Gamma | `https://gamma-api.polymarket.com` | Market data (read-only) |
+| CLOB | `https://clob.polymarket.com` | Trading |
 
-## Signature Types
+- Chain: Polygon (137)
+- Currency: USDC
+- Min order: $5
 
-| Type | Value | Use Case |
-|------|-------|----------|
-| EOA | 0 | MetaMask, standard wallets |
-| POLY_PROXY | 1 | Magic Link (email/Google login) |
-| GNOSIS_SAFE | 2 | Multisig wallets |
+---
 
-## Disclaimer
+## ⚠️ Disclaimer
 
-⚠️ **This is real money trading.** Use at your own risk. Past performance does not guarantee future results. Only trade what you can afford to lose.
+**This is real money trading.** Use at your own risk. Past performance ≠ future results. Only trade what you can afford to lose.
+
+---
 
 ## License
 
 MIT
 
-## Credits
+---
 
-Built for [Clawdbot](https://github.com/clawdbot/clawdbot) - the AI agent framework.
+## Links
 
-Uses:
-- [Polymarket](https://polymarket.com) CLOB & Gamma APIs
-- [py-clob-client](https://github.com/Polymarket/py-clob-client)
-- [Exa AI](https://exa.ai) for research
+- [Clawdbot](https://github.com/clawdbot/clawdbot) - AI agent framework
+- [Polymarket](https://polymarket.com) - Prediction markets
+- [py-clob-client](https://github.com/Polymarket/py-clob-client) - Python SDK
