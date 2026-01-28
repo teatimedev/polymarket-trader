@@ -1,140 +1,168 @@
 ---
 name: polymarket-trader
-description: Trade on Polymarket prediction markets - place orders, check positions, research markets with AI, and execute trading strategies.
-homepage: https://polymarket.com
+description: Trade on Polymarket prediction markets - scan opportunities, research with AI, place orders, monitor positions. Say "Set up Polymarket trading" to auto-configure.
+homepage: https://github.com/teatimedev/polymarket-trader
 metadata: {"clawdbot":{"emoji":"🎰"}}
 ---
 
 # Polymarket Trader
 
-Full trading access to Polymarket prediction markets. Research markets, analyze odds, and execute trades.
+Autonomous Polymarket trading skill. Scans markets, researches opportunities, executes trades.
 
-## Setup
+## Setup Command
 
-Requires environment variable:
+When user says **"Set up Polymarket trading"** or **"Configure Polymarket skill"**:
+
+1. Check if Python venv exists:
 ```bash
-export POLYMARKET_PRIVATE_KEY="0x..."  # Your wallet private key
-export POLYMARKET_FUNDER="0x..."       # Optional: proxy/funder address for Magic Link accounts
+ls ~/polymarket-venv/bin/activate
 ```
 
-Uses Python venv at `~/polymarket-venv` with `py-clob-client`.
+2. If not, create it:
+```bash
+python3 -m venv ~/polymarket-venv
+source ~/polymarket-venv/bin/activate
+pip install py-clob-client eth-account requests
+```
 
-## Commands
+3. Create the cron jobs (use cron tool, not exec):
+   - **Polymarket Daily Scan**: `0 9 * * *` Europe/London, isolated session
+   - **Polymarket Trader**: `0 */6 * * *` Europe/London, isolated session  
+   - **Polymarket Position Monitor**: `30 */3 * * *` Europe/London, isolated session
 
-### Check Balance & Positions
+4. Check if `POLYMARKET_PRIVATE_KEY` is set. If not, tell user to add it to ~/.bashrc
+
+5. Confirm setup complete and explain what each cron does.
+
+## Chat Commands
+
+| User says | Action |
+|-----------|--------|
+| "Set up Polymarket trading" | Run setup (create venv + crons) |
+| "Scan Polymarket" | Run scanner.py, show top opportunities |
+| "Polymarket trending" | Run markets.py trending |
+| "Search Polymarket for X" | Run markets.py search "X" |
+| "Check Polymarket positions" | Run account.py |
+| "Check Polymarket balance" | Run account.py |
+| "Buy $X on [market] YES/NO" | Research → trade.py with --yes |
+| "Cancel Polymarket orders" | Run orders.py cancel-all |
+| "Research [market topic]" | Exa search → form probability → compare to market |
+
+## Scripts
+
+All scripts require: `source ~/polymarket-venv/bin/activate`
+
+### Scan for Opportunities
+```bash
+python3 {baseDir}/scripts/scanner.py --limit 30 --exclude-sports
+python3 {baseDir}/scripts/scanner.py -c politics -c geopolitics --json
+python3 {baseDir}/scripts/scanner.py --min-odds 0.30 --max-odds 0.70
+```
+
+### Search & Browse Markets
+```bash
+python3 {baseDir}/scripts/markets.py trending
+python3 {baseDir}/scripts/markets.py search "trump"
+python3 {baseDir}/scripts/markets.py category politics
+python3 {baseDir}/scripts/markets.py detail <slug>
+```
+
+### Place Orders (min $5)
+```bash
+# Buy YES at limit price (--yes skips confirmation)
+python3 {baseDir}/scripts/trade.py buy <token_id> --price 0.50 --size 5 --yes
+
+# Buy NO
+python3 {baseDir}/scripts/trade.py buy <token_id> --side NO --price 0.35 --size 5 --yes
+
+# Sell position
+python3 {baseDir}/scripts/trade.py sell <token_id> --price 0.70 --size 5 --yes
+```
+
+### Manage Orders
+```bash
+python3 {baseDir}/scripts/orders.py list
+python3 {baseDir}/scripts/orders.py cancel <order_id>
+python3 {baseDir}/scripts/orders.py cancel-all
+```
+
+### Check Account
 ```bash
 python3 {baseDir}/scripts/account.py
 ```
 
-### Search Markets
-```bash
-python3 {baseDir}/scripts/markets.py search "trump"
-python3 {baseDir}/scripts/markets.py trending
-python3 {baseDir}/scripts/markets.py category politics
+## Cron Job Messages
+
+### Daily Scan (9am)
+```
+Daily Polymarket opportunity scan.
+
+## MEMORY FIRST
+Read ~/clawd/memory/YYYY-MM-DD.md (last 2-3 days) for context.
+
+## SCAN
+source ~/polymarket-venv/bin/activate && python3 ~/clawd/skills/polymarket-trader/scripts/scanner.py --limit 30 --exclude-sports
+
+## REPORT
+Top 5 opportunities, time-sensitive markets, themes.
 ```
 
-### Get Market Details
-```bash
-python3 {baseDir}/scripts/markets.py detail <market_id_or_slug>
+### Trader (every 6h)
+```
+Polymarket systematic trading scan.
+
+## MEMORY FIRST
+Read memory for positions, past research, lessons.
+
+## CHECK BALANCE & SCAN
+source ~/polymarket-venv/bin/activate
+python3 ~/clawd/skills/polymarket-trader/scripts/account.py
+python3 ~/clawd/skills/polymarket-trader/scripts/scanner.py --exclude-sports --limit 15
+
+## RESEARCH & TRADE
+Top 2-3 markets: Exa research → probability estimate → trade if edge >10%
+
+## UPDATE MEMORY
+Log trades, research, lessons.
 ```
 
-### Scan for Opportunities (Systematic Scanner)
-```bash
-# Full scan - top 25 opportunities across all categories
-python3 {baseDir}/scripts/scanner.py --limit 25
+### Position Monitor (every 3h)
+```
+Polymarket position check.
 
-# Exclude sports (focus on news/politics/crypto)
-python3 {baseDir}/scripts/scanner.py --exclude-sports --limit 20
+## MEMORY + CHECK
+Read memory for entry prices.
+source ~/polymarket-venv/bin/activate && python3 ~/clawd/skills/polymarket-trader/scripts/account.py
 
-# Filter by category
-python3 {baseDir}/scripts/scanner.py -c politics -c geopolitics --limit 15
+## ACTIONS
+- Up >15% → consider profit
+- Down >20% → consider stop
+- Resolving <24h → flag
 
-# Tighter odds range (closer to 50/50 = more uncertainty)
-python3 {baseDir}/scripts/scanner.py --min-odds 0.30 --max-odds 0.70
-
-# Higher volume threshold
-python3 {baseDir}/scripts/scanner.py --min-volume 50000 --min-liquidity 5000
-
-# JSON output for programmatic use
-python3 {baseDir}/scripts/scanner.py --json --limit 10
+## UPDATE MEMORY
+Log status. Only message user if notable.
 ```
 
-**Scanner Scoring (100 pts max):**
-- Odds 20-80% range (30 pts) - uncertainty = edge potential
-- Volume log scale (25 pts) - credible market
-- 24h activity (10 pts) - live trading
-- Liquidity (15 pts) - can enter/exit
-- Time to resolution 1-30 days (20 pts) - sweet spot
+## Research Workflow
 
-**Categories detected:** politics, crypto, geopolitics, tech, sports, entertainment, economics, other
+When researching a market:
+1. Use Exa deep search for recent news (last 7 days)
+2. Gather evidence for and against
+3. Form probability estimate
+4. Compare to market price
+5. Calculate edge: `My estimate - Market price`
+6. Trade if edge > 10%
 
-### Place Orders
+## Environment Variables
+
 ```bash
-# Buy YES at limit price (minimum $5)
-python3 {baseDir}/scripts/trade.py buy <token_id> --price 0.65 --size 5
-
-# Buy NO
-python3 {baseDir}/scripts/trade.py buy <token_id> --side NO --price 0.35 --size 10
-
-# Skip confirmation (for automated trading)
-python3 {baseDir}/scripts/trade.py buy <token_id> --price 0.50 --size 5 --yes
-
-# Market order (takes best available)
-python3 {baseDir}/scripts/trade.py buy <token_id> --market --size 5
-
-# Sell position
-python3 {baseDir}/scripts/trade.py sell <token_id> --price 0.70 --size 5
+POLYMARKET_PRIVATE_KEY="0x..."  # Required: wallet private key
+POLYMARKET_FUNDER="0x..."       # Optional: proxy address for Magic Link
 ```
-
-**Note:** Minimum order size is $5 USDC.
-
-### Manage Orders
-```bash
-python3 {baseDir}/scripts/orders.py list           # View open orders
-python3 {baseDir}/scripts/orders.py cancel <id>    # Cancel specific order
-python3 {baseDir}/scripts/orders.py cancel-all     # Cancel all orders
-```
-
-### Research Mode
-For deep research before trading, use the exa-search skill:
-```bash
-# Research a topic before betting
-mcporter call "https://mcp.exa.ai/mcp?tools=deep_search_exa" deep_search_exa query="Will the Fed cut rates in March 2026?"
-
-# Get latest news
-mcporter call "https://mcp.exa.ai/mcp?tools=web_search_advanced_exa" web_search_advanced_exa \
-  query="Federal Reserve interest rate decision" \
-  category="news" \
-  numResults:10 \
-  --args '{"startPublishedDate": "2026-01-01"}'
-```
-
-## Trading Workflow
-
-1. **Find Market**: `markets.py search "<topic>"` or `markets.py trending`
-2. **Research**: Use exa-search for deep research on the topic
-3. **Analyze**: Check current odds, volume, end date
-4. **Trade**: Place order with `trade.py buy/sell`
-5. **Monitor**: Check positions with `account.py`
-
-## Example Chat Usage
-
-- "What are the trending Polymarket markets?"
-- "Research and bet $50 on Trump winning 2028"
-- "What's the current spread on Bitcoin hitting 100k?"
-- "Cancel all my open orders"
-- "What's my Polymarket balance?"
-- "Do deep research on Fed rate cuts and place a bet"
-
-## Signature Types
-
-- `0` = EOA (MetaMask/standard wallet)
-- `1` = POLY_PROXY (Magic Link email/Google login)
-- `2` = GNOSIS_SAFE (multisig)
 
 ## Notes
 
-- All trades are on Polygon mainnet (chain_id: 137)
-- Funds are in USDC
-- This is real money — use wisely!
-- For Magic Link accounts: you may need to find your proxy address on polymarket.com
+- Trades on Polygon mainnet (chain_id: 137)
+- Funds in USDC
+- Minimum order: $5
+- Use `--yes` flag for automated trading (skips confirmation)
