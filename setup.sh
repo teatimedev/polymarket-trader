@@ -17,11 +17,28 @@ else
 fi
 
 # Check for credentials
+MISSING_CREDS=0
+
 if [ -z "$POLYMARKET_PRIVATE_KEY" ]; then
     echo ""
     echo "⚠️  POLYMARKET_PRIVATE_KEY not set!"
     echo "Add to ~/.bashrc:"
     echo '  export POLYMARKET_PRIVATE_KEY="0x..."'
+    MISSING_CREDS=1
+fi
+
+if [ -z "$EXA_API_KEY" ]; then
+    echo ""
+    echo "⚠️  EXA_API_KEY not set!"
+    echo "Get your key: https://dashboard.exa.ai/api-keys"
+    echo "Add to ~/.bashrc:"
+    echo '  export EXA_API_KEY="..."'
+    MISSING_CREDS=1
+fi
+
+if [ $MISSING_CREDS -eq 1 ]; then
+    echo ""
+    echo "After adding keys, run: source ~/.bashrc"
     echo ""
 fi
 

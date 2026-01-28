@@ -15,10 +15,16 @@ git clone https://github.com/teatimedev/polymarket-trader.git
 
 Add to `~/.bashrc`:
 ```bash
+# Required: Polymarket wallet
 export POLYMARKET_PRIVATE_KEY="0x..."  # Your wallet private key
+
+# Required: Exa AI for research
+export EXA_API_KEY="..."  # Get from https://exa.ai
 ```
 
 Then reload: `source ~/.bashrc`
+
+**Get your Exa API key:** https://dashboard.exa.ai/api-keys (free tier available)
 
 ### 3. Set Up via Chat
 
@@ -165,6 +171,36 @@ All crons:
 | 24h activity | 10 | Active trading |
 | Resolves 1-30 days | 20 | Sweet spot |
 
+### Research (Exa AI)
+
+When you say "Research [topic]", Clawdbot uses Exa MCP to:
+
+1. **News Search** — Recent articles (last 7 days)
+   ```
+   mcporter call "https://mcp.exa.ai/mcp" web_search_advanced_exa
+     query="US Iran strikes" category="news"
+   ```
+
+2. **Evidence Gathering** — Key facts for/against
+
+3. **Probability Estimate** — Based on evidence
+
+4. **Edge Calculation** — Your estimate vs market price
+
+Example output:
+```
+📰 Found 8 sources:
+- CNN: "US carrier enters Middle East"
+- Reuters: "Trump hints at diplomacy"
+
+⚖️ Evidence:
+FOR (strike likely): Military buildup, past precedent
+AGAINST: Diplomatic signals, international pressure
+
+📊 My estimate: 55% | Market: 42%
+✅ Edge: +13% on YES
+```
+
 ---
 
 ## Configuration
@@ -217,7 +253,14 @@ clawdbot cron add --name "Polymarket Daily Scan" --schedule "0 9 * * *" ...
 - [Clawdbot](https://github.com/clawdbot/clawdbot)
 - Python 3.10+
 - Polymarket account with USDC on Polygon
-- (Optional) Exa AI API key for research
+- [Exa AI](https://exa.ai) API key for research (free tier available)
+
+### Getting API Keys
+
+| Service | URL | Notes |
+|---------|-----|-------|
+| Polymarket | [polymarket.com](https://polymarket.com) | Export private key from wallet |
+| Exa AI | [dashboard.exa.ai](https://dashboard.exa.ai/api-keys) | Free tier: 1000 searches/month |
 
 ---
 

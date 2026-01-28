@@ -158,7 +158,34 @@ When researching a market:
 ```bash
 POLYMARKET_PRIVATE_KEY="0x..."  # Required: wallet private key
 POLYMARKET_FUNDER="0x..."       # Optional: proxy address for Magic Link
+EXA_API_KEY="..."               # Required: for research (https://exa.ai)
 ```
+
+## Research with Exa
+
+Use mcporter (bundled with Clawdbot) to call Exa MCP:
+
+### Web Search (news)
+```bash
+mcporter call "https://mcp.exa.ai/mcp?tools=web_search_advanced_exa" web_search_advanced_exa \
+  query="US Iran military strikes" \
+  category="news" \
+  numResults:8 \
+  --args '{"startPublishedDate": "2026-01-20"}'
+```
+
+### Deep Search (summarized)
+```bash
+mcporter call "https://mcp.exa.ai/mcp?tools=deep_search_exa" deep_search_exa \
+  objective="What is the likelihood of US military strikes on Iran in February 2026?"
+```
+
+### Research Workflow
+1. Search recent news: `web_search_advanced_exa` with category="news"
+2. Get expert analysis: `deep_search_exa` for synthesized view
+3. Extract key evidence for/against
+4. Form probability estimate
+5. Compare to market price → calculate edge
 
 ## Notes
 
